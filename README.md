@@ -1,0 +1,1 @@
+A 3DS homebrew game based on Clock Simulator on the Nintendo Switch, more specifically the clock jumping minigame (hence the name of this project). It will use the 3DS camera and other features to track if the player is jumping, if we get to that point. Otherwise, it will be a good introduction to 3DS homebrew creation and a moderately complex (but hopefully fun!) intro to C++.

@@ -1,0 +1,20 @@
+CompileFlags:
+  Add:
+    - "-Wno-unknown-argument"
+    - "-mfloat-abi=hard"
+    - "-march=armv6k"
+    - "-mtune=mpcore"
+    - "-mfpu=vfp"
+    - "-D__3DS__"
+    # Use environment variables from devkitNix
+    - "-isystem"
+    - "${DEVKITARM}/arm-none-eabi/include"
+    - "-isystem"
+    - "${CTRULIB}/include"
+
+  # This tells clangd to ignore the '-mword-relocations' flag specifically
+  # if it finds it in a compile_commands.json
+  Remove: ["-mword-relocations"]
+
+Index:
+  Background: Build
