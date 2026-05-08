@@ -1,190 +1,240 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <malloc.h>
-#include <setjmp.h>
+#include "sal_t3x.h"
+#include "vshader_shbin.h"
 #include <3ds.h>
-#include <sys/dirent.h>
-#include <sys/errno.h>
-#include <sys/unistd.h>
-#include <stdbool.h>
+#include <citro3d.h>
+#include <string.h>
+#include <tex3ds.h>
 
-#define CONFIG_3D_SLIDERSTATE (*(volatile float*)0x1FF81080)
-#define WAIT_TIMEOUT 300000000ULL
+#define CLEAR_COLOR 0x68B0D8FF
 
-#define WIDTH 400
-#define HEIGHT 240
-#define SCREEN_SIZE WIDTH * HEIGHT * 2
-#define BUF_SIZE SCREEN_SIZE * 2
+#define DISPLAY_TRANSFER_FLAGS                                                                                         \
+    (GX_TRANSFER_FLIP_VERT(0) | GX_TRANSFER_OUT_TILED(0) | GX_TRANSFER_RAW_COPY(0) |                                   \
+     GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) |                     \
+     GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
 
-static jmp_buf exitJmp;
+typedef struct
+{
+    float position[3];
+    float texcoord[2];
+    float normal[3];
+} vertex;
 
-inline void clearScreen(void) {
-	u8 *frame = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL);
-	memset(frame, 0, 320 * 240 * 3);
+static const vertex vertex_list[] = {
+    // First face (PZ)
+    // First triangle
+    {{-0.5f, -0.5f, +0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, +1.0f}},
+    {{+0.5f, -0.5f, +0.5f}, {1.0f, 0.0f}, {0.0f, 0.0f, +1.0f}},
+    {{+0.5f, +0.5f, +0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, +1.0f}},
+    // Second triangle
+    {{+0.5f, +0.5f, +0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, +1.0f}},
+    {{-0.5f, +0.5f, +0.5f}, {0.0f, 1.0f}, {0.0f, 0.0f, +1.0f}},
+    {{-0.5f, -0.5f, +0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, +1.0f}},
+
+    // Second face (MZ)
+    // First triangle
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}},
+    {{-0.5f, +0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, 0.0f, -1.0f}},
+    {{+0.5f, +0.5f, -0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, -1.0f}},
+    // Second triangle
+    {{+0.5f, +0.5f, -0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, -1.0f}},
+    {{+0.5f, -0.5f, -0.5f}, {0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}},
+
+    // Third face (PX)
+    // First triangle
+    {{+0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {+1.0f, 0.0f, 0.0f}},
+    {{+0.5f, +0.5f, -0.5f}, {1.0f, 0.0f}, {+1.0f, 0.0f, 0.0f}},
+    {{+0.5f, +0.5f, +0.5f}, {1.0f, 1.0f}, {+1.0f, 0.0f, 0.0f}},
+    // Second triangle
+    {{+0.5f, +0.5f, +0.5f}, {1.0f, 1.0f}, {+1.0f, 0.0f, 0.0f}},
+    {{+0.5f, -0.5f, +0.5f}, {0.0f, 1.0f}, {+1.0f, 0.0f, 0.0f}},
+    {{+0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {+1.0f, 0.0f, 0.0f}},
+
+    // Fourth face (MX)
+    // First triangle
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}},
+    {{-0.5f, -0.5f, +0.5f}, {1.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}},
+    {{-0.5f, +0.5f, +0.5f}, {1.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}},
+    // Second triangle
+    {{-0.5f, +0.5f, +0.5f}, {1.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}},
+    {{-0.5f, +0.5f, -0.5f}, {0.0f, 1.0f}, {-1.0f, 0.0f, 0.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f}},
+
+    // Fifth face (PY)
+    // First triangle
+    {{-0.5f, +0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, +1.0f, 0.0f}},
+    {{-0.5f, +0.5f, +0.5f}, {1.0f, 0.0f}, {0.0f, +1.0f, 0.0f}},
+    {{+0.5f, +0.5f, +0.5f}, {1.0f, 1.0f}, {0.0f, +1.0f, 0.0f}},
+    // Second triangle
+    {{+0.5f, +0.5f, +0.5f}, {1.0f, 1.0f}, {0.0f, +1.0f, 0.0f}},
+    {{+0.5f, +0.5f, -0.5f}, {0.0f, 1.0f}, {0.0f, +1.0f, 0.0f}},
+    {{-0.5f, +0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, +1.0f, 0.0f}},
+
+    // Sixth face (MY)
+    // First triangle
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
+    {{+0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
+    {{+0.5f, -0.5f, +0.5f}, {1.0f, 1.0f}, {0.0f, -1.0f, 0.0f}},
+    // Second triangle
+    {{+0.5f, -0.5f, +0.5f}, {1.0f, 1.0f}, {0.0f, -1.0f, 0.0f}},
+    {{-0.5f, -0.5f, +0.5f}, {0.0f, 1.0f}, {0.0f, -1.0f, 0.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
+};
+
+#define vertex_list_count (sizeof(vertex_list) / sizeof(vertex_list[0]))
+
+static DVLB_s *vshader_dvlb;
+static shaderProgram_s program;
+static int uLoc_projection, uLoc_modelView;
+static int uLoc_lightVec, uLoc_lightHalfVec, uLoc_lightClr, uLoc_material;
+static C3D_Mtx projection;
+static C3D_Mtx material = {{
+    {{0.0f, 0.2f, 0.2f, 0.2f}}, // Ambient
+    {{0.0f, 0.4f, 0.4f, 0.4f}}, // Diffuse
+    {{0.0f, 0.8f, 0.8f, 0.8f}}, // Specular
+    {{1.0f, 0.0f, 0.0f, 0.0f}}, // Emission
+}};
+
+static void *vbo_data;
+static C3D_Tex sal_tex;
+static float angleX = 0.0, angleY = 0.0;
+
+// Helper function for loading a texture from memory
+static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data, size_t size)
+{
+    Tex3DS_Texture t3x = Tex3DS_TextureImport(data, size, tex, cube, false);
+    if (!t3x)
+        return false;
+
+    // Delete the t3x object since we don't need it
+    Tex3DS_TextureFree(t3x);
+    return true;
 }
 
-void hang(char *message) {
-	clearScreen();
-	printf("%s", message);
-	printf("Press start to exit");
+static void sceneInit(void)
+{
+    // Load the vertex shader, create a shader program and bind it
+    vshader_dvlb = DVLB_ParseFile((u32 *)vshader_shbin, vshader_shbin_size);
+    shaderProgramInit(&program);
+    shaderProgramSetVsh(&program, &vshader_dvlb->DVLE[0]);
+    C3D_BindProgram(&program);
 
-	while (aptMainLoop()) {
-		hidScanInput();
+    // Get the location of the uniforms
+    uLoc_projection   = shaderInstanceGetUniformLocation(program.vertexShader, "projection");
+    uLoc_modelView    = shaderInstanceGetUniformLocation(program.vertexShader, "modelView");
+    uLoc_lightVec     = shaderInstanceGetUniformLocation(program.vertexShader, "lightVec");
+    uLoc_lightHalfVec = shaderInstanceGetUniformLocation(program.vertexShader, "lightHalfVec");
+    uLoc_lightClr     = shaderInstanceGetUniformLocation(program.vertexShader, "lightClr");
+    uLoc_material     = shaderInstanceGetUniformLocation(program.vertexShader, "material");
 
-		u32 kHeld = hidKeysHeld();
-		if (kHeld & KEY_START) longjmp(exitJmp, 1);
-	}
+    // Configure attributes for use with the vertex shader
+    C3D_AttrInfo *attrInfo = C3D_GetAttrInfo();
+    AttrInfo_Init(attrInfo);
+    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 3); // v0=position
+    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 2); // v1=texcoord
+    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 3); // v2=normal
+
+    // Compute the projection matrix
+    Mtx_PerspTilt(&projection, C3D_AngleFromDegrees(80.0f), C3D_AspectRatioTop, 0.01f, 1000.0f, false);
+
+    // Create the VBO (vertex buffer object)
+    vbo_data = linearAlloc(sizeof(vertex_list));
+    memcpy(vbo_data, vertex_list, sizeof(vertex_list));
+
+    // Configure buffers
+    C3D_BufInfo *bufInfo = C3D_GetBufInfo();
+    BufInfo_Init(bufInfo);
+    BufInfo_Add(bufInfo, vbo_data, sizeof(vertex), 3, 0x210);
+
+    // Load the texture and bind it to the first texture unit
+    if (!loadTextureFromMem(&sal_tex, NULL, sal_t3x, sal_t3x_size))
+        svcBreak(USERBREAK_PANIC);
+    C3D_TexSetFilter(&sal_tex, GPU_LINEAR, GPU_NEAREST);
+    C3D_TexBind(0, &sal_tex);
+
+    // Configure the first fragment shading substage to blend the texture color with
+    // the vertex color (calculated by the vertex shader using a lighting algorithm)
+    // See https://www.opengl.org/sdk/docs/man2/xhtml/glTexEnv.xml for more insight
+    C3D_TexEnv *env = C3D_GetTexEnv(0);
+    C3D_TexEnvInit(env);
+    C3D_TexEnvSrc(env, C3D_Both, GPU_TEXTURE0, GPU_PRIMARY_COLOR, 0);
+    C3D_TexEnvFunc(env, C3D_Both, GPU_MODULATE);
 }
 
-void cleanup() {
-	camExit();
-	gfxExit();
-	acExit();
+static void sceneRender(void)
+{
+    // Calculate the modelView matrix
+    C3D_Mtx modelView;
+    Mtx_Identity(&modelView);
+    Mtx_Translate(&modelView, 0.0, 0.0, -2.0 + 0.5 * sinf(angleX), true);
+    Mtx_RotateX(&modelView, angleX, true);
+    Mtx_RotateY(&modelView, angleY, true);
+
+    // Rotate the cube each frame
+    angleX += M_PI / 180;
+    angleY += M_PI / 360;
+
+    // Update the uniforms
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightVec, 0.0f, 0.0f, -1.0f, 0.0f);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightHalfVec, 0.0f, 0.0f, -1.0f, 0.0f);
+    C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightClr, 1.0f, 1.0f, 1.0f, 1.0f);
+
+    // Draw the VBO
+    C3D_DrawArrays(GPU_TRIANGLES, 0, vertex_list_count);
 }
 
-void writePictureToFramebufferRGB565(void *fb, void *img, u16 x, u16 y, u16 width, u16 height) {
-	u8 *fb_8 = (u8*) fb;
-	u16 *img_16 = (u16*) img;
-	int i, j, draw_x, draw_y;
-	for(j = 0; j < height; j++) {
-		for(i = 0; i < width; i++) {
-			draw_y = y + height - j;
-			draw_x = x + i;
-			u32 v = (draw_y + draw_x * height) * 3;
-			u16 data = img_16[j * width + i];
-			uint8_t b = ((data >> 11) & 0x1F) << 3;
-			uint8_t g = ((data >> 5) & 0x3F) << 2;
-			uint8_t r = (data & 0x1F) << 3;
-			fb_8[v] = r;
-			fb_8[v+1] = g;
-			fb_8[v+2] = b;
-		}
-	}
+static void sceneExit(void)
+{
+    // Free the texture
+    C3D_TexDelete(&sal_tex);
+
+    // Free the VBO
+    linearFree(vbo_data);
+
+    // Free the shader program
+    shaderProgramFree(&program);
+    DVLB_Free(vshader_dvlb);
 }
 
-// TODO: Figure out how to use CAMU_GetStereoCameraCalibrationData
-void takePicture3D(u8 *buf) {
-	u32 bufSize;
-	printf("CAMU_GetMaxBytes: 0x%08X\n", (unsigned int) CAMU_GetMaxBytes(&bufSize, WIDTH, HEIGHT));
-	printf("CAMU_SetTransferBytes: 0x%08X\n", (unsigned int) CAMU_SetTransferBytes(PORT_BOTH, bufSize, WIDTH, HEIGHT));
+int main()
+{
+    // Initialize graphics
+    gfxInitDefault();
+    C3D_Init(C3D_DEFAULT_CMDBUF_SIZE);
 
-	printf("CAMU_Activate: 0x%08X\n", (unsigned int) CAMU_Activate(SELECT_OUT1_OUT2));
+    // Initialize the render target
+    C3D_RenderTarget *target = C3D_RenderTargetCreate(240, 400, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
+    C3D_RenderTargetSetOutput(target, GFX_TOP, GFX_LEFT, DISPLAY_TRANSFER_FLAGS);
 
-	Handle camReceiveEvent = 0;
-	Handle camReceiveEvent2 = 0;
+    // Initialize the scene
+    sceneInit();
 
-	printf("CAMU_ClearBuffer: 0x%08X\n", (unsigned int) CAMU_ClearBuffer(PORT_BOTH));
-	printf("CAMU_SynchronizeVsyncTiming: 0x%08X\n", (unsigned int) CAMU_SynchronizeVsyncTiming(SELECT_OUT1, SELECT_OUT2));
+    // Main loop
+    while (aptMainLoop())
+    {
+        hidScanInput();
 
-	printf("CAMU_StartCapture: 0x%08X\n", (unsigned int) CAMU_StartCapture(PORT_BOTH));
+        // Respond to user input
+        u32 kDown = hidKeysDown();
+        if (kDown & KEY_START)
+            break; // break in order to return to hbmenu
 
-	printf("CAMU_SetReceiving: 0x%08X\n", (unsigned int) CAMU_SetReceiving(&camReceiveEvent, buf, PORT_CAM1, SCREEN_SIZE, (s16) bufSize));
-	printf("CAMU_SetReceiving: 0x%08X\n", (unsigned int) CAMU_SetReceiving(&camReceiveEvent2, buf + SCREEN_SIZE, PORT_CAM2, SCREEN_SIZE, (s16) bufSize));
-	printf("svcWaitSynchronization: 0x%08X\n", (unsigned int) svcWaitSynchronization(camReceiveEvent, WAIT_TIMEOUT));
-	printf("svcWaitSynchronization: 0x%08X\n", (unsigned int) svcWaitSynchronization(camReceiveEvent2, WAIT_TIMEOUT));
-	printf("CAMU_PlayShutterSound: 0x%08X\n", (unsigned int) CAMU_PlayShutterSound(SHUTTER_SOUND_TYPE_NORMAL));
+        // Render the scene
+        C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+        C3D_RenderTargetClear(target, C3D_CLEAR_ALL, CLEAR_COLOR, 0);
+        C3D_FrameDrawOn(target);
+        sceneRender();
+        C3D_FrameEnd(0);
+    }
 
-	printf("CAMU_StopCapture: 0x%08X\n", (unsigned int) CAMU_StopCapture(PORT_BOTH));
+    // Deinitialize the scene
+    sceneExit();
 
-	svcCloseHandle(camReceiveEvent);
-	svcCloseHandle(camReceiveEvent2);
-
-	printf("CAMU_Activate: 0x%08X\n", (unsigned int) CAMU_Activate(SELECT_NONE));
-}
-
-int main() {
-	// Initializations
-	acInit();
-	gfxInitDefault();
-	consoleInit(GFX_BOTTOM, NULL);
-
-	// Enable double buffering to remove screen tearing
-	gfxSetDoubleBuffering(GFX_TOP, true);
-	gfxSetDoubleBuffering(GFX_BOTTOM, false);
-
-	// Save current stack frame for easy exit
-	if(setjmp(exitJmp)) {
-		cleanup();
-		return 0;
-	}
-
-	u32 kDown;
-	u32 kHeld;
-
-	printf("Initializing camera\n");
-
-	printf("camInit: 0x%08X\n", (unsigned int) camInit());
-
-	printf("CAMU_SetSize: 0x%08X\n", (unsigned int) CAMU_SetSize(SELECT_OUT1_OUT2, SIZE_CTR_TOP_LCD, CONTEXT_A));
-	printf("CAMU_SetOutputFormat: 0x%08X\n", (unsigned int) CAMU_SetOutputFormat(SELECT_OUT1_OUT2, OUTPUT_RGB_565, CONTEXT_A));
-
-	printf("CAMU_SetNoiseFilter: 0x%08X\n", (unsigned int) CAMU_SetNoiseFilter(SELECT_OUT1_OUT2, true));
-	printf("CAMU_SetAutoExposure: 0x%08X\n", (unsigned int) CAMU_SetAutoExposure(SELECT_OUT1_OUT2, true));
-	printf("CAMU_SetAutoWhiteBalance: 0x%08X\n", (unsigned int) CAMU_SetAutoWhiteBalance(SELECT_OUT1_OUT2, true));
-	//printf("CAMU_SetEffect: 0x%08X\n", (unsigned int) CAMU_SetEffect(SELECT_OUT1_OUT2, EFFECT_MONO, CONTEXT_A));
-
-	printf("CAMU_SetTrimming: 0x%08X\n", (unsigned int) CAMU_SetTrimming(PORT_CAM1, false));
-	printf("CAMU_SetTrimming: 0x%08X\n", (unsigned int) CAMU_SetTrimming(PORT_CAM2, false));
-	//printf("CAMU_SetTrimmingParamsCenter: 0x%08X\n", (unsigned int) CAMU_SetTrimmingParamsCenter(PORT_CAM1, 512, 240, 512, 384));
-
-	u8 *buf = malloc(BUF_SIZE);
-	if(!buf) {
-		hang("Failed to allocate memory!");
-	}
-
-	gfxFlushBuffers();
-	gspWaitForVBlank();
-	gfxSwapBuffers();
-
-	bool held_R = false;
-
-	printf("\nPress R to take a new picture\n");
-	printf("Use slider to enable/disable 3D\n");
-	printf("Press Start to exit to Homebrew Launcher\n");
-
-	// Main loop
-	while (aptMainLoop()) {
-		// Read which buttons are currently pressed or not
-		hidScanInput();
-		kDown = hidKeysDown();
-		kHeld = hidKeysHeld();
-
-		// If START button is pressed, break loop and quit
-		if (kDown & KEY_START) {
-			break;
-		}
-
-		if ((kHeld & KEY_R) && !held_R) {
-			printf("Capturing new image\n");
-			gfxFlushBuffers();
-			gspWaitForVBlank();
-			gfxSwapBuffers();
-			held_R = true;
-			takePicture3D(buf);
-		} else if (!(kHeld & KEY_R)) {
-			held_R = false;
-		}
-
-		if(CONFIG_3D_SLIDERSTATE > 0.0f) {
-			gfxSet3D(true);
-			writePictureToFramebufferRGB565(gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL), buf, 0, 0, WIDTH, HEIGHT);
-			writePictureToFramebufferRGB565(gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, NULL, NULL), buf + SCREEN_SIZE, 0, 0, WIDTH, HEIGHT);
-		} else {
-			gfxSet3D(false);
-			writePictureToFramebufferRGB565(gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL), buf, 0, 0, WIDTH, HEIGHT);
-		}
-
-		// Flush and swap framebuffers
-		gfxFlushBuffers();
-		gspWaitForVBlank();
-		gfxSwapBuffers();
-	}
-
-	// Exit
-	free(buf);
-	cleanup();
-
-	// Return to hbmenu
-	return 0;
+    // Deinitialize graphics
+    C3D_Fini();
+    gfxExit();
+    return 0;
 }

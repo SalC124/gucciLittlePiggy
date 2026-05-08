@@ -29,7 +29,6 @@
           shellHook = ''
             export CTRULIB="$DEVKITPRO/libctru"
             export DEVKITARM="$DEVKITPRO/devkitARM"
-            export CTRULIB="$DEVKITPRO/libctru"
             # instead of the standard nixpkgs arm-none-eabi-gcc
             export PATH="$DEVKITARM/bin:$PATH"
           '';
