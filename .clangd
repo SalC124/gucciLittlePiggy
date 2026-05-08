@@ -5,13 +5,14 @@ CompileFlags:
     - "-D__3DS__"
     - "-D__arm__"
     - "-DARM11"
-    - "-D_COMPILING_NEWLIB"
-    # Ensure 3DS headers are found
     - "-isystem"
-    - "${CTRULIB}/include"
+    - "/nix/store/3w8nr2njb5nl2lbd8y773l8j5mb8hvwn-devkitARM/opt/devkitpro/devkitARM/arm-none-eabi/include/c++/15.2.0"
     - "-isystem"
-    - "${DEVKITARM}/arm-none-eabi/include"
-    # This is the "magic" flag for cross-compilers
+    - "/nix/store/3w8nr2njb5nl2lbd8y773l8j5mb8hvwn-devkitARM/opt/devkitpro/devkitARM/arm-none-eabi/include/c++/15.2.0/arm-none-eabi"
+    - "-isystem"
+    - "/nix/store/3w8nr2njb5nl2lbd8y773l8j5mb8hvwn-devkitARM/opt/devkitpro/devkitARM/arm-none-eabi/include"
+    - "-isystem"
+    - "/nix/store/3w8nr2njb5nl2lbd8y773l8j5mb8hvwn-devkitARM/opt/devkitpro/libctru/include"
 
   Remove:
     - "-mword-relocations"

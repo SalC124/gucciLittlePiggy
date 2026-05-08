@@ -1,6 +1,7 @@
 #include "sal_t3x.h"
 #include "vshader_shbin.h"
 #include <3ds.h>
+#include <3ds/services/hid.h>
 #include <citro3d.h>
 #include <string.h>
 #include <tex3ds.h>
@@ -99,6 +100,9 @@ static void *vbo_data;
 static C3D_Tex sal_tex;
 static float angleX = 0.0, angleY = 0.0;
 
+static float xPos = 0.0;
+static float yPos = 0.0;
+
 // Helper function for loading a texture from memory
 static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data, size_t size)
 {
@@ -166,7 +170,7 @@ static void sceneRender(void)
     // Calculate the modelView matrix
     C3D_Mtx modelView;
     Mtx_Identity(&modelView);
-    Mtx_Translate(&modelView, 0.0, 0.0, -2.0 + 0.5 * sinf(angleX), true);
+    Mtx_Translate(&modelView, 0.0 + xPos, 0.0 + yPos, -2.0 + 0.5 * sinf(angleX), true);
     Mtx_RotateX(&modelView, angleX, true);
     Mtx_RotateY(&modelView, angleY, true);
 
@@ -212,6 +216,14 @@ int main()
     // Initialize the scene
     sceneInit();
 
+    PrintConsole bottomScreen;
+
+    // Initialize console for both screen using the two different PrintConsole we have defined
+    consoleInit(GFX_BOTTOM, &bottomScreen);
+    consoleSelect(&bottomScreen);
+    printf("Salutations! :D\n");
+    printf("...or hi, i guess :(");
+
     // Main loop
     while (aptMainLoop())
     {
@@ -219,8 +231,18 @@ int main()
 
         // Respond to user input
         u32 kDown = hidKeysDown();
+        u32 kHeld = hidKeysHeld();
         if (kDown & KEY_START)
             break; // break in order to return to hbmenu
+
+        if (kHeld & KEY_DDOWN)
+            yPos += -0.1;
+        if (kHeld & KEY_DUP)
+            yPos += 0.1;
+        if (kHeld & KEY_DLEFT)
+            xPos += -0.1;
+        if (kHeld & KEY_DRIGHT)
+            xPos += 0.1;
 
         // Render the scene
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
