@@ -1,20 +1,22 @@
 CompileFlags:
   Add:
     - "-Wno-unknown-argument"
-    - "-mfloat-abi=hard"
-    - "-march=armv6k"
-    - "-mtune=mpcore"
-    - "-mfpu=vfp"
+    - "--target=arm-none-eabi"
     - "-D__3DS__"
-    # Use environment variables from devkitNix
-    - "-isystem"
-    - "${DEVKITARM}/arm-none-eabi/include"
+    - "-D__arm__"
+    - "-DARM11"
+    - "-D_COMPILING_NEWLIB"
+    # Ensure 3DS headers are found
     - "-isystem"
     - "${CTRULIB}/include"
+    - "-isystem"
+    - "${DEVKITARM}/arm-none-eabi/include"
+    # This is the "magic" flag for cross-compilers
 
-  # This tells clangd to ignore the '-mword-relocations' flag specifically
-  # if it finds it in a compile_commands.json
-  Remove: ["-mword-relocations"]
+  Remove:
+    - "-mword-relocations"
+    - "-march=*"
+    - "-mtune=*"
 
 Index:
   Background: Build
