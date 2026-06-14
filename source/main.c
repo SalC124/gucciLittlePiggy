@@ -83,8 +83,7 @@ static const vertex cube_vertex_list[] = {
 #define CUBE_VERTEX_LIST_COUNT (sizeof(cube_vertex_list) / sizeof(cube_vertex_list[0]))
 
 #define CIRCLE_SEGMENTS        30
-static vertex *circle_vbo_data;
-#define CIRCLE_VERTEX_COUNT (CIRCLE_SEGMENTS + 2) // Center + segments + closing vertex
+#define CIRCLE_VERTEX_COUNT    (CIRCLE_SEGMENTS + 2) // Center + segments + closing vertex
 
 static vertex *generatePolygon(int vertices, float radius)
 {
@@ -160,6 +159,7 @@ static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data
 }
 
 Mesh cube_mesh;
+Mesh circle_mesh;
 
 static void sceneInit(void)
 {
@@ -189,10 +189,8 @@ static void sceneInit(void)
 
     // Create the VBO (vertex buffer object) and put them in linear memory
 
-    cube_mesh = Mesh_New(cube_vertex_list, CUBE_VERTEX_LIST_COUNT, GPU_TRIANGLES);
-    // cube_vbo_data = linearAlloc(sizeof(cube_vertex_list));
-    // memcpy(cube_vbo_data, cube_vertex_list, sizeof(cube_vertex_list));
-    circle_vbo_data = generateCircle(0.5f);
+    cube_mesh   = Mesh_New(cube_vertex_list, CUBE_VERTEX_LIST_COUNT, GPU_TRIANGLES);
+    circle_mesh = Mesh_New(generateCircle(0.5f), CIRCLE_VERTEX_COUNT, GPU_TRIANGLE_FAN);
 
     // Configure buffers
     C3D_BufInfo *bufInfo = C3D_GetBufInfo();
@@ -214,20 +212,10 @@ static void sceneRender(void)
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightHalfVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightClr, 1.0f, 1.0f, 1.0f, 1.0f);
 
-    C3D_BufInfo *bufInfo = C3D_GetBufInfo();
-
     // ============================= Draw the Cube =============================
-    // Bind cube texture
-    C3D_TexBind(0, &sal_tex);
-
     Mesh_Bind(&cube_mesh);
 
-    // BufInfo_Init(bufInfo);
-    // BufInfo_Add(bufInfo, cube_vbo_data, sizeof(vertex), 3, 0x210);
-    // C3D_SetBufInfo(bufInfo);
-
-    // material set on a per-object basis
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material);
+    Material cube_material = Material_CreateTextured(&sal_tex, &material);
 
     C3D_Mtx cubeModelView;
     Mtx_Identity(&cubeModelView);
@@ -238,25 +226,16 @@ static void sceneRender(void)
     // Upload new cube uniform
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &cubeModelView);
 
-    C3D_TexEnv *cubeEnv0 = C3D_GetTexEnv(0);
-    C3D_TexEnvInit(cubeEnv0);
-    // Use texture *modulate* mode
-    C3D_TexEnvSrc(cubeEnv0, C3D_Both, GPU_TEXTURE0, GPU_PRIMARY_COLOR, 0);
-    C3D_TexEnvFunc(cubeEnv0, C3D_Both, GPU_MODULATE);
-
-    C3D_TexEnv *cubeEnv1 = C3D_GetTexEnv(1);
-    C3D_TexEnvInit(cubeEnv1);
+    Material_Bind(&cube_material, uLoc_material);
 
     // Draw cube VBO
-    C3D_DrawArrays(GPU_TRIANGLES, 0, cube_mesh.vertex_count);
+    C3D_DrawArrays(cube_mesh.mode, 0, cube_mesh.vertex_count);
 
     // ============================ Draw the Circle ============================
     // Bind circle texture
     C3D_TexBind(0, NULL);
 
-    BufInfo_Init(bufInfo);
-    BufInfo_Add(bufInfo, circle_vbo_data, sizeof(vertex), 3, 0x210);
-    C3D_SetBufInfo(bufInfo);
+    Mesh_Bind(&circle_mesh);
 
     static const C3D_Mtx flatWhiteMaterial = {{
         {{1.0f, 1.0f, 1.0f, 1.0f}},
@@ -264,6 +243,9 @@ static void sceneRender(void)
         {{0.0f, 0.0f, 0.0f, 0.0f}},
         {{1.0f, 1.0f, 1.0f, 1.0f}},
     }};
+
+    Material circle_material = Material_CreateColor(0xFFFFFFFF, &flatWhiteMaterial);
+
     // material set on a per-object basis
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &flatWhiteMaterial);
 
@@ -277,19 +259,10 @@ static void sceneRender(void)
     // Upload new circle uniform
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &circleModelView);
 
-    C3D_TexEnv *circleEnv0 = C3D_GetTexEnv(0);
-    C3D_TexEnvInit(circleEnv0);
-    // Configure TexEnv to completely ignore textures/lighting and use a solid color
-    C3D_TexEnvSrc(circleEnv0, C3D_Both, GPU_CONSTANT, 0, 0);
-    C3D_TexEnvColor(circleEnv0, 0xFFFFFFFF); // AABBGGRR
-    // circleEnv0->srcRgb = GPU_PRIMARY_COLOR; // force srcRgb. no matter the material
-    C3D_TexEnvFunc(circleEnv0, C3D_Both, GPU_REPLACE);
-
-    C3D_TexEnv *circleEnv1 = C3D_GetTexEnv(1);
-    C3D_TexEnvInit(circleEnv1);
+    Material_Bind(&circle_material, uLoc_material);
 
     // Draw the circle VBO
-    C3D_DrawArrays(GPU_TRIANGLE_FAN, 0, CIRCLE_VERTEX_COUNT);
+    C3D_DrawArrays(circle_mesh.mode, 0, circle_mesh.vertex_count);
 }
 
 static void sceneExit(void)
@@ -298,9 +271,8 @@ static void sceneExit(void)
     C3D_TexDelete(&sal_tex);
 
     // Free the VBOs
-    // linearFree(cube_vbo_data);
     Mesh_Decimate(&cube_mesh);
-    linearFree(circle_vbo_data);
+    Mesh_Decimate(&circle_mesh);
 
     // Free the shader program
     shaderProgramFree(&program);
