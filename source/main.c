@@ -159,7 +159,7 @@ static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data
     return true;
 }
 
-static Mesh cube_mesh;
+Mesh cube_mesh;
 
 static void sceneInit(void)
 {
@@ -248,7 +248,7 @@ static void sceneRender(void)
     C3D_TexEnvInit(cubeEnv1);
 
     // Draw cube VBO
-    C3D_DrawArrays(GPU_TRIANGLES, 0, CUBE_VERTEX_LIST_COUNT);
+    C3D_DrawArrays(GPU_TRIANGLES, 0, cube_mesh.vertex_count);
 
     // ============================ Draw the Circle ============================
     // Bind circle texture
