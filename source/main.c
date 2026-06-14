@@ -1,10 +1,14 @@
 #include "sal_t3x.h"
 #include "vshader_shbin.h"
 #include <3ds.h>
+#include <3ds/gpu/enums.h>
 #include <3ds/services/hid.h>
+#include <c3d/buffers.h>
 #include <citro3d.h>
 #include <string.h>
 #include <tex3ds.h>
+
+#include "../include/biblio.h"
 
 #define CLEAR_COLOR 0x68B0D8FF
 
@@ -13,14 +17,8 @@
      GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) |                     \
      GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
 
-typedef struct
-{
-    float position[3];
-    float texcoord[2];
-    float normal[3];
-} vertex;
-
-static const vertex vertex_list[] = {
+static vertex *cube_vbo_data;
+static const vertex cube_vertex_list[] = {
     // First face (PZ)
     // First triangle
     {{-0.5f, -0.5f, +0.5f}, {0.0f, 0.0f}, {0.0f, 0.0f, +1.0f}},
@@ -81,8 +79,54 @@ static const vertex vertex_list[] = {
     {{-0.5f, -0.5f, +0.5f}, {0.0f, 1.0f}, {0.0f, -1.0f, 0.0f}},
     {{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}},
 };
+#define CUBE_VERTEX_LIST_COUNT (sizeof(cube_vertex_list) / sizeof(cube_vertex_list[0]))
 
-#define vertex_list_count (sizeof(vertex_list) / sizeof(vertex_list[0]))
+#define CIRCLE_SEGMENTS        30
+static vertex *circle_vbo_data;
+#define CIRCLE_VERTEX_COUNT (CIRCLE_SEGMENTS + 2) // Center + segments + closing vertex
+static vertex *generatePolygon(int vertices, float radius)
+{
+    vertex *data = (vertex *)linearAlloc(sizeof(vertex) * (vertices + 2));
+
+    // Focus
+    data[0].position[0] = 0.0f;
+    data[0].position[1] = 0.0f;
+    data[0].position[2] = 0.0f;
+
+    data[0].texcoord[0] = 0.5f;
+    data[0].texcoord[1] = 0.5f;
+
+    data[0].normal[0] = 0.0f;
+    data[0].normal[1] = 0.0f;
+    data[0].normal[2] = 1.0f; // Facing the camera
+
+    // Outer Points
+    for (int i = 0; i <= vertices; i++)
+    {
+        float angle = i * M_TAU / vertices;
+        float x     = cosf(angle) * radius;
+        float y     = sinf(angle) * radius;
+
+        data[i + 1].position[0] = x;
+        data[i + 1].position[1] = y;
+        data[i + 1].position[2] = 0.0f;
+
+        // Map texture coords (0.0 to 1.0 range)
+        data[i + 1].texcoord[0] = (cosf(angle) + 1.0f) * 0.5f;
+        data[i + 1].texcoord[1] = (sinf(angle) + 1.0f) * 0.5f;
+
+        data[i + 1].normal[0] = 0.0f;
+        data[i + 1].normal[1] = 0.0f;
+        data[i + 1].normal[2] = 1.0f;
+    }
+
+    return data;
+}
+
+static vertex *generateCircle(float radius)
+{
+    return generatePolygon(CIRCLE_SEGMENTS, radius);
+}
 
 static DVLB_s *vshader_dvlb;
 static shaderProgram_s program;
@@ -96,12 +140,10 @@ static C3D_Mtx material = {{
     {{1.0f, 0.0f, 0.0f, 0.0f}}, // Emission
 }};
 
-static void *vbo_data;
 static C3D_Tex sal_tex;
-static float angleX = 0.0, angleY = 0.0;
 
-static float xPos = 0.0;
-static float yPos = 0.0;
+static float angleX = 0.0, angleY = 0.0;
+static float xPos = 0.0, yPos = 0.0;
 
 // Helper function for loading a texture from memory
 static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data, size_t size)
@@ -131,6 +173,7 @@ static void sceneInit(void)
     uLoc_lightClr     = shaderInstanceGetUniformLocation(program.vertexShader, "lightClr");
     uLoc_material     = shaderInstanceGetUniformLocation(program.vertexShader, "material");
 
+    // GLOBAL DEFAULT. OVERRIDE LATER
     // Configure attributes for use with the vertex shader
     C3D_AttrInfo *attrInfo = C3D_GetAttrInfo();
     AttrInfo_Init(attrInfo);
@@ -141,14 +184,14 @@ static void sceneInit(void)
     // Compute the projection matrix
     Mtx_PerspTilt(&projection, C3D_AngleFromDegrees(80.0f), C3D_AspectRatioTop, 0.01f, 1000.0f, false);
 
-    // Create the VBO (vertex buffer object)
-    vbo_data = linearAlloc(sizeof(vertex_list));
-    memcpy(vbo_data, vertex_list, sizeof(vertex_list));
+    // Create the VBO (vertex buffer object) and put them in linear memory
+    cube_vbo_data = linearAlloc(sizeof(cube_vertex_list));
+    memcpy(cube_vbo_data, cube_vertex_list, sizeof(cube_vertex_list));
+    circle_vbo_data = generateCircle(0.5f);
 
     // Configure buffers
     C3D_BufInfo *bufInfo = C3D_GetBufInfo();
     BufInfo_Init(bufInfo);
-    BufInfo_Add(bufInfo, vbo_data, sizeof(vertex), 3, 0x210);
 
     // Load the texture and bind it to the first texture unit
     if (!loadTextureFromMem(&sal_tex, NULL, sal_t3x, sal_t3x_size))
@@ -156,6 +199,7 @@ static void sceneInit(void)
     C3D_TexSetFilter(&sal_tex, GPU_LINEAR, GPU_NEAREST);
     C3D_TexBind(0, &sal_tex);
 
+    // GLOBAL DEFAULT. OVERRIDE LATER
     // Configure the first fragment shading substage to blend the texture color with
     // the vertex color (calculated by the vertex shader using a lighting algorithm)
     // See https://www.opengl.org/sdk/docs/man2/xhtml/glTexEnv.xml for more insight
@@ -167,27 +211,63 @@ static void sceneInit(void)
 
 static void sceneRender(void)
 {
-    // Calculate the modelView matrix
-    C3D_Mtx modelView;
-    Mtx_Identity(&modelView);
-    Mtx_Translate(&modelView, 0.0 + xPos, 0.0 + yPos, -2.0 + 0.5 * sinf(angleX), true);
-    Mtx_RotateX(&modelView, angleX, true);
-    Mtx_RotateY(&modelView, angleY, true);
-
-    // Rotate the cube each frame
-    angleX += M_PI / 180;
-    angleY += M_PI / 360;
-
     // Update the uniforms
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightHalfVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightClr, 1.0f, 1.0f, 1.0f, 1.0f);
 
-    // Draw the VBO
-    C3D_DrawArrays(GPU_TRIANGLES, 0, vertex_list_count);
+    C3D_BufInfo *bufInfo = C3D_GetBufInfo();
+    C3D_TexEnv *env      = C3D_GetTexEnv(0);
+
+    // ============================= Draw the Cube =============================
+    BufInfo_Init(bufInfo);
+    BufInfo_Add(bufInfo, cube_vbo_data, sizeof(vertex), 3, 0x210);
+
+    // Calculate the modelView matrix for cube
+    C3D_Mtx cubeModelView;
+    Mtx_Identity(&cubeModelView);
+    Mtx_Translate(&cubeModelView, 0.0 + xPos, 0.0 + yPos, -2.0f, true);
+    Mtx_RotateX(&cubeModelView, angleX, true);
+    Mtx_RotateY(&cubeModelView, angleY, true);
+
+    // Upload new cube uniform
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &cubeModelView);
+
+    // Bind cube texture
+    C3D_TexBind(0, &sal_tex);
+
+    // Use texture *modulate* mode
+    C3D_TexEnvInit(env);
+    C3D_TexEnvSrc(env, C3D_Both, GPU_TEXTURE0, GPU_PRIMARY_COLOR, 0);
+    C3D_TexEnvFunc(env, C3D_Both, GPU_MODULATE);
+
+    // Draw cube VBO
+    C3D_DrawArrays(GPU_TRIANGLES, 0, CUBE_VERTEX_LIST_COUNT);
+
+    // ============================ Draw the Circle ============================
+    BufInfo_Init(bufInfo);
+    BufInfo_Add(bufInfo, circle_vbo_data, sizeof(vertex), 3, 0x210);
+
+    // Calculate the modelView matrix for circle
+    C3D_Mtx circleModelView;
+    Mtx_Identity(&circleModelView);
+    Mtx_Translate(&circleModelView, 0.0 - xPos, 0.0 - yPos, -2.0f, true);
+    Mtx_RotateX(&circleModelView, angleX, true);
+    Mtx_RotateY(&circleModelView, angleY, true);
+
+    // Upload new cube uniform
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &circleModelView);
+
+    // Configure TexEnv to completely ignore textures/lighting and use a solid color
+    C3D_TexEnvInit(env);
+    C3D_TexEnvSrc(env, C3D_Both, GPU_CONSTANT, GPU_PRIMARY_COLOR, GPU_PRIMARY_COLOR); // Use the constant color
+    C3D_TexEnvFunc(env, C3D_Both, GPU_REPLACE);       // Replace everything with it
+    C3D_TexEnvColor(env, 0xFFFFFFFF);                 // Solid White (RGBA: 255, 255, 255, 255)
+
+    // Draw the circle VBO
+    C3D_DrawArrays(GPU_TRIANGLE_FAN, 0, CIRCLE_VERTEX_COUNT);
 }
 
 static void sceneExit(void)
@@ -196,7 +276,8 @@ static void sceneExit(void)
     C3D_TexDelete(&sal_tex);
 
     // Free the VBO
-    linearFree(vbo_data);
+    linearFree(cube_vbo_data);
+    linearFree(circle_vbo_data);
 
     // Free the shader program
     shaderProgramFree(&program);
@@ -243,6 +324,15 @@ int main()
             xPos += -0.1;
         if (kHeld & KEY_DRIGHT)
             xPos += 0.1;
+
+        if (kHeld & KEY_X)
+            angleX += -0.1;
+        if (kHeld & KEY_B)
+            angleX += 0.1;
+        if (kHeld & KEY_A)
+            angleY += 0.1;
+        if (kHeld & KEY_Y)
+            angleY += -0.1;
 
         // Render the scene
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);

@@ -1,5 +1,35 @@
 [
   {
+    "file": "/home/saltcal/Code/School/25-26/APCS/endyear/gucciLittlePiggy/source/biblio.c",
+    "arguments": [
+      "arm-none-eabi-gcc",
+      "-MMD",
+      "-MP",
+      "-MF",
+      "/home/saltcal/Code/School/25-26/APCS/endyear/gucciLittlePiggy/build/biblio.d",
+      "-g",
+      "-Wall",
+      "-O2",
+      "-mword-relocations",
+      "-ffunction-sections",
+      "-march=armv6k",
+      "-mtune=mpcore",
+      "-mfloat-abi=hard",
+      "-mtp=soft",
+      "-I/home/saltcal/Code/School/25-26/APCS/endyear/gucciLittlePiggy/include",
+      "-I/nix/store/3w8nr2njb5nl2lbd8y773l8j5mb8hvwn-devkitARM/opt/devkitpro/libctru/include",
+      "-I/nix/store/3w8nr2njb5nl2lbd8y773l8j5mb8hvwn-devkitARM/opt/devkitpro/portlibs/3ds/include",
+      "-I/home/saltcal/Code/School/25-26/APCS/endyear/gucciLittlePiggy/build",
+      "-D__3DS__",
+      "-c",
+      "/home/saltcal/Code/School/25-26/APCS/endyear/gucciLittlePiggy/source/biblio.c",
+      "-o",
+      "biblio.o"
+    ],
+    "directory": "/home/saltcal/Code/School/25-26/APCS/endyear/gucciLittlePiggy/build",
+    "output": "biblio.o"
+  },
+  {
     "file": "/home/saltcal/Code/School/25-26/APCS/endyear/gucciLittlePiggy/source/main.c",
     "arguments": [
       "arm-none-eabi-gcc",
