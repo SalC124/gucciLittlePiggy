@@ -18,7 +18,7 @@
      GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) |                     \
      GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
 
-static vertex *cube_vbo_data;
+// static vertex *cube_vbo_data;
 static const vertex cube_vertex_list[] = {
     // First face (PZ)
     // First triangle
@@ -159,6 +159,8 @@ static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data
     return true;
 }
 
+static Mesh cube_mesh;
+
 static void sceneInit(void)
 {
     // Load the vertex shader, create a shader program and bind it
@@ -186,8 +188,10 @@ static void sceneInit(void)
     Mtx_PerspTilt(&projection, C3D_AngleFromDegrees(80.0f), C3D_AspectRatioTop, 0.01f, 1000.0f, false);
 
     // Create the VBO (vertex buffer object) and put them in linear memory
-    cube_vbo_data = linearAlloc(sizeof(cube_vertex_list));
-    memcpy(cube_vbo_data, cube_vertex_list, sizeof(cube_vertex_list));
+
+    cube_mesh = Mesh_New(cube_vertex_list, CUBE_VERTEX_LIST_COUNT, GPU_TRIANGLES);
+    // cube_vbo_data = linearAlloc(sizeof(cube_vertex_list));
+    // memcpy(cube_vbo_data, cube_vertex_list, sizeof(cube_vertex_list));
     circle_vbo_data = generateCircle(0.5f);
 
     // Configure buffers
@@ -216,9 +220,11 @@ static void sceneRender(void)
     // Bind cube texture
     C3D_TexBind(0, &sal_tex);
 
-    BufInfo_Init(bufInfo);
-    BufInfo_Add(bufInfo, cube_vbo_data, sizeof(vertex), 3, 0x210);
-    C3D_SetBufInfo(bufInfo);
+    Mesh_Bind(&cube_mesh);
+
+    // BufInfo_Init(bufInfo);
+    // BufInfo_Add(bufInfo, cube_vbo_data, sizeof(vertex), 3, 0x210);
+    // C3D_SetBufInfo(bufInfo);
 
     // material set on a per-object basis
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material);
@@ -274,7 +280,8 @@ static void sceneRender(void)
     C3D_TexEnv *circleEnv0 = C3D_GetTexEnv(0);
     C3D_TexEnvInit(circleEnv0);
     // Configure TexEnv to completely ignore textures/lighting and use a solid color
-    C3D_TexEnvSrc(circleEnv0, C3D_Both, GPU_PRIMARY_COLOR, 0, 0);
+    C3D_TexEnvSrc(circleEnv0, C3D_Both, GPU_CONSTANT, 0, 0);
+    C3D_TexEnvColor(circleEnv0, 0xFFFFFFFF); // AABBGGRR
     // circleEnv0->srcRgb = GPU_PRIMARY_COLOR; // force srcRgb. no matter the material
     C3D_TexEnvFunc(circleEnv0, C3D_Both, GPU_REPLACE);
 
@@ -291,7 +298,8 @@ static void sceneExit(void)
     C3D_TexDelete(&sal_tex);
 
     // Free the VBOs
-    linearFree(cube_vbo_data);
+    // linearFree(cube_vbo_data);
+    Mesh_Decimate(&cube_mesh);
     linearFree(circle_vbo_data);
 
     // Free the shader program
