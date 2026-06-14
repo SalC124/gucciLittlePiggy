@@ -85,6 +85,7 @@ static const vertex cube_vertex_list[] = {
 #define CIRCLE_SEGMENTS        30
 static vertex *circle_vbo_data;
 #define CIRCLE_VERTEX_COUNT (CIRCLE_SEGMENTS + 2) // Center + segments + closing vertex
+
 static vertex *generatePolygon(int vertices, float radius)
 {
     vertex *data = (vertex *)linearAlloc(sizeof(vertex) * (vertices + 2));
@@ -174,7 +175,6 @@ static void sceneInit(void)
     uLoc_lightClr     = shaderInstanceGetUniformLocation(program.vertexShader, "lightClr");
     uLoc_material     = shaderInstanceGetUniformLocation(program.vertexShader, "material");
 
-    // GLOBAL DEFAULT. OVERRIDE LATER
     // Configure attributes for use with the vertex shader
     C3D_AttrInfo *attrInfo = C3D_GetAttrInfo();
     AttrInfo_Init(attrInfo);
@@ -199,79 +199,92 @@ static void sceneInit(void)
         svcBreak(USERBREAK_PANIC);
     C3D_TexSetFilter(&sal_tex, GPU_LINEAR, GPU_NEAREST);
     C3D_TexBind(0, &sal_tex);
-
-    // GLOBAL DEFAULT. OVERRIDE LATER
-    // Configure the first fragment shading substage to blend the texture color with
-    // the vertex color (calculated by the vertex shader using a lighting algorithm)
-    // See https://www.opengl.org/sdk/docs/man2/xhtml/glTexEnv.xml for more insight
-    C3D_TexEnv *env = C3D_GetTexEnv(0);
-    C3D_TexEnvInit(env);
-    C3D_TexEnvSrc(env, C3D_Both, GPU_TEXTURE0, GPU_PRIMARY_COLOR, 0);
-    C3D_TexEnvFunc(env, C3D_Both, GPU_MODULATE);
 }
 
 static void sceneRender(void)
 {
-    // Update the uniforms
+    // Update global camera uniforms
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightHalfVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightClr, 1.0f, 1.0f, 1.0f, 1.0f);
 
-    C3D_BufInfo *bufInfo = C3D_GetBufInfo();
-    C3D_TexEnv *env      = C3D_GetTexEnv(0);
+    C3D_BufInfo *bufInfo   = C3D_GetBufInfo();
+    C3D_AttrInfo *attrInfo = C3D_GetAttrInfo();
 
     // ============================= Draw the Cube =============================
+    C3D_TexBind(0, &sal_tex);
+
+    // Explicitly reset attribute info layout for Cube
+    AttrInfo_Init(attrInfo);
+    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 3); // v0=position
+    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 2); // v1=texcoord
+    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 3); // v2=normal
+
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, cube_vbo_data, sizeof(vertex), 3, 0x210);
     C3D_SetBufInfo(bufInfo);
 
-    // Calculate the modelView matrix for cube
+    // Restore the cube's shiny reflective material profile
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material);
+
     C3D_Mtx cubeModelView;
     Mtx_Identity(&cubeModelView);
     Mtx_Translate(&cubeModelView, 0.0 + xPos, 0.0 + yPos, -2.0f, true);
     Mtx_RotateX(&cubeModelView, angleX, true);
     Mtx_RotateY(&cubeModelView, angleY, true);
-
-    // Upload new cube uniform
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &cubeModelView);
 
-    // Bind cube texture
-    C3D_TexBind(0, &sal_tex);
+    // Completely reset and decouple TexEnv Stage 0 and Stage 1 for Cube
+    C3D_TexEnv *cubeEnv0 = C3D_GetTexEnv(0);
+    C3D_TexEnvInit(cubeEnv0);
+    C3D_TexEnvSrc(cubeEnv0, C3D_Both, GPU_TEXTURE0, GPU_PRIMARY_COLOR, 0);
+    C3D_TexEnvFunc(cubeEnv0, C3D_Both, GPU_MODULATE);
 
-    // Use texture *modulate* mode
-    C3D_TexEnvSrc(env, C3D_Both, GPU_TEXTURE0, GPU_PRIMARY_COLOR, 0);
-    C3D_TexEnvFunc(env, C3D_Both, GPU_MODULATE);
+    C3D_TexEnv *cubeEnv1 = C3D_GetTexEnv(1);
+    C3D_TexEnvInit(cubeEnv1); // Forces stage 1 into a clean pass-through state
 
-    // Draw cube VBO
     C3D_DrawArrays(GPU_TRIANGLES, 0, CUBE_VERTEX_LIST_COUNT);
 
     // ============================ Draw the Circle ============================
+    C3D_TexBind(0, NULL);
+
+    // Explicitly reset attribute info layout for Circle
+    AttrInfo_Init(attrInfo);
+    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 3);
+    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 2);
+    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 3);
+
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, circle_vbo_data, sizeof(vertex), 3, 0x210);
     C3D_SetBufInfo(bufInfo);
 
-    // Calculate the modelView matrix for circle
+    // FORCE FLAT LIGHTING: Slam the material to pure emissive white before drawing circle
+    static const C3D_Mtx flatWhiteMaterial = {{
+        {{1.0f, 1.0f, 1.0f, 1.0f}}, // Ambient
+        {{1.0f, 1.0f, 1.0f, 1.0f}}, // Diffuse
+        {{0.0f, 0.0f, 0.0f, 0.0f}}, // Specular (Disabled to stop tan/yellow shifts!)
+        {{1.0f, 1.0f, 1.0f, 1.0f}}, // Emission
+    }};
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &flatWhiteMaterial);
+
     C3D_Mtx circleModelView;
     Mtx_Identity(&circleModelView);
     Mtx_Translate(&circleModelView, 0.0 - xPos, 0.0 - yPos, -2.0f - zPos, true);
     Mtx_RotateX(&circleModelView, angleX, true);
     Mtx_RotateY(&circleModelView, angleY, true);
-
-    // Upload new cube uniform
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &circleModelView);
 
-    // Bind NO texture
-    C3D_TexBind(0, NULL);
+    // Completely reset and decouple TexEnv Stage 0 and Stage 1 for Circle
+    C3D_TexEnv *circleEnv0 = C3D_GetTexEnv(0);
+    C3D_TexEnvInit(circleEnv0);
+    C3D_TexEnvSrc(circleEnv0, C3D_Both, GPU_PRIMARY_COLOR, 0, 0); // Pull directly from white material
+    circleEnv0->srcRgb = GPU_PRIMARY_COLOR;                       // Fix fallback assignments explicitly
+    C3D_TexEnvFunc(circleEnv0, C3D_Both, GPU_REPLACE);
 
-    // Configure TexEnv to completely ignore textures/lighting and use a solid color
-    C3D_TexEnvSrc(env, C3D_Both, GPU_CONSTANT, GPU_PRIMARY_COLOR, GPU_PRIMARY_COLOR); // Use the constant color
-    C3D_TexEnvSrc(env, C3D_Both, GPU_CONSTANT, 0, 0); // Use the constant color
-    C3D_TexEnvFunc(env, C3D_Both, GPU_REPLACE);       // Replace everything with it
-    C3D_TexEnvColor(env, 0xFFFFFFFF);                 // Solid White (RGBA: 255, 255, 255, 255)
+    C3D_TexEnv *circleEnv1 = C3D_GetTexEnv(1);
+    C3D_TexEnvInit(circleEnv1);
 
-    // Draw the circle VBO
     C3D_DrawArrays(GPU_TRIANGLE_FAN, 0, CIRCLE_VERTEX_COUNT);
 }
 
