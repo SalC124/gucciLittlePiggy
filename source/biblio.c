@@ -98,7 +98,7 @@ Drawable3dObject DrawableObject_New(Mesh *mesh, Material *material)
     obj.material = material;
 
     obj.x = obj.y = obj.z = obj.rot_x = obj.rot_y = obj.rot_z = 0.0f;
-    obj.z                                                     = -2.0f;
+    obj.sc_x = obj.sc_y = obj.sc_z = 1.0f;
 
     Mtx_Identity(&obj.modelView);
 
@@ -113,6 +113,8 @@ void DrawableObject_UpdateModel(Drawable3dObject *obj)
     Mtx_RotateX(&obj->modelView, obj->rot_x, true);
     Mtx_RotateY(&obj->modelView, obj->rot_y, true);
     Mtx_RotateZ(&obj->modelView, obj->rot_z, true);
+
+    Mtx_Scale(&obj->modelView, obj->sc_x, obj->sc_y, obj->sc_z);
 }
 
 void DrawableObject_Draw(const Drawable3dObject *obj, int uLoc_modelView, int uLoc_material)

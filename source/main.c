@@ -6,6 +6,7 @@
 #include <c3d/buffers.h>
 #include <c3d/texenv.h>
 #include <citro3d.h>
+#include <stdio.h>
 #include <string.h>
 #include <tex3ds.h>
 
@@ -217,6 +218,8 @@ static void sceneInit(void)
 
     cube_obj.z   = -2.0f;
     circle_obj.z = -2.0f;
+
+    circle_obj.sc_x = circle_obj.sc_y = 10.0f;
 }
 
 static void sceneRender(void)
@@ -269,7 +272,7 @@ int main()
     consoleInit(GFX_BOTTOM, &bottomScreen);
     consoleSelect(&bottomScreen);
     printf("Salutations! :D\n");
-    printf("...or hi, i guess :(");
+    printf("...or hi, i guess :(\n");
 
     // Main loop
     while (aptMainLoop())
@@ -325,6 +328,12 @@ int main()
 
         circle_obj.rot_x -= heheAngleX;
         circle_obj.rot_y -= heheAngleY;
+
+        if (kDown & KEY_SELECT)
+        {
+            printf("z: %f\n", heheZ);
+            printf("angle x: %f\n", heheAngleX);
+        }
 
         // Render the scene
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
