@@ -134,17 +134,20 @@ static shaderProgram_s program;
 static int uLoc_projection, uLoc_modelView;
 static int uLoc_lightVec, uLoc_lightHalfVec, uLoc_lightClr, uLoc_material;
 static C3D_Mtx projection;
-static C3D_Mtx material = {{
+static C3D_Mtx material                = {{
     {{0.0f, 0.2f, 0.2f, 0.2f}}, // Ambient
     {{0.0f, 0.4f, 0.4f, 0.4f}}, // Diffuse
     {{0.0f, 0.8f, 0.8f, 0.8f}}, // Specular
     {{1.0f, 0.0f, 0.0f, 0.0f}}, // Emission
 }};
+static const C3D_Mtx flatWhiteMaterial = {{
+    {{1.0f, 1.0f, 1.0f, 1.0f}},
+    {{1.0f, 1.0f, 1.0f, 1.0f}},
+    {{0.0f, 0.0f, 0.0f, 0.0f}},
+    {{1.0f, 1.0f, 1.0f, 1.0f}},
+}};
 
 static C3D_Tex sal_tex;
-
-static float angleX = 0.0, angleY = 0.0;
-static float xPos = 0.0, yPos = 0.0, zPos = 0.0;
 
 // Helper function for loading a texture from memory
 static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data, size_t size)
@@ -160,6 +163,12 @@ static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data
 
 Mesh cube_mesh;
 Mesh circle_mesh;
+
+Material cube_material;
+Material circle_material;
+
+Drawable3dObject cube_obj;
+Drawable3dObject circle_obj;
 
 static void sceneInit(void)
 {
@@ -187,11 +196,6 @@ static void sceneInit(void)
     // Compute the projection matrix
     Mtx_PerspTilt(&projection, C3D_AngleFromDegrees(80.0f), C3D_AspectRatioTop, 0.01f, 1000.0f, false);
 
-    // Create the VBO (vertex buffer object) and put them in linear memory
-
-    cube_mesh   = Mesh_New(cube_vertex_list, CUBE_VERTEX_LIST_COUNT, GPU_TRIANGLES);
-    circle_mesh = Mesh_New(generateCircle(0.5f), CIRCLE_VERTEX_COUNT, GPU_TRIANGLE_FAN);
-
     // Configure buffers
     C3D_BufInfo *bufInfo = C3D_GetBufInfo();
     BufInfo_Init(bufInfo);
@@ -201,68 +205,35 @@ static void sceneInit(void)
         svcBreak(USERBREAK_PANIC);
     C3D_TexSetFilter(&sal_tex, GPU_LINEAR, GPU_NEAREST);
     C3D_TexBind(0, &sal_tex);
+
+    cube_mesh   = Mesh_New(cube_vertex_list, CUBE_VERTEX_LIST_COUNT, GPU_TRIANGLES);
+    circle_mesh = Mesh_New(generateCircle(0.5f), CIRCLE_VERTEX_COUNT, GPU_TRIANGLE_FAN);
+
+    cube_material   = Material_CreateTextured(&sal_tex, &material);
+    circle_material = Material_CreateColor(0xFFFFFFFF, &flatWhiteMaterial);
+
+    cube_obj   = DrawableObject_New(&cube_mesh, &cube_material);
+    circle_obj = DrawableObject_New(&circle_mesh, &circle_material);
+
+    cube_obj.z   = -2.0f;
+    circle_obj.z = -2.0f;
 }
 
 static void sceneRender(void)
 {
     // Update the uniforms
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
-    // C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material); // removed due to changing material
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightHalfVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightClr, 1.0f, 1.0f, 1.0f, 1.0f);
 
     // ============================= Draw the Cube =============================
-    Mesh_Bind(&cube_mesh);
-
-    Material cube_material = Material_CreateTextured(&sal_tex, &material);
-
-    C3D_Mtx cubeModelView;
-    Mtx_Identity(&cubeModelView);
-    Mtx_Translate(&cubeModelView, 0.0 + xPos, 0.0 + yPos, -2.0f, true);
-    Mtx_RotateX(&cubeModelView, angleX, true);
-    Mtx_RotateY(&cubeModelView, angleY, true);
-
-    // Upload new cube uniform
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &cubeModelView);
-
-    Material_Bind(&cube_material, uLoc_material);
-
-    // Draw cube VBO
-    C3D_DrawArrays(cube_mesh.mode, 0, cube_mesh.vertex_count);
+    DrawableObject_UpdateModel(&cube_obj);
+    DrawableObject_Draw(&cube_obj, uLoc_modelView, uLoc_material);
 
     // ============================ Draw the Circle ============================
-    // Bind circle texture
-    C3D_TexBind(0, NULL);
-
-    Mesh_Bind(&circle_mesh);
-
-    static const C3D_Mtx flatWhiteMaterial = {{
-        {{1.0f, 1.0f, 1.0f, 1.0f}},
-        {{1.0f, 1.0f, 1.0f, 1.0f}},
-        {{0.0f, 0.0f, 0.0f, 0.0f}},
-        {{1.0f, 1.0f, 1.0f, 1.0f}},
-    }};
-
-    Material circle_material = Material_CreateColor(0xFFFFFFFF, &flatWhiteMaterial);
-
-    // material set on a per-object basis
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &flatWhiteMaterial);
-
-    // Calculate the modelView matrix for circle
-    C3D_Mtx circleModelView;
-    Mtx_Identity(&circleModelView);
-    Mtx_Translate(&circleModelView, 0.0 - xPos, 0.0 - yPos, -2.0f - zPos, true);
-    Mtx_RotateX(&circleModelView, angleX, true);
-    Mtx_RotateY(&circleModelView, angleY, true);
-
-    // Upload new circle uniform
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &circleModelView);
-
-    Material_Bind(&circle_material, uLoc_material);
-
-    // Draw the circle VBO
-    C3D_DrawArrays(circle_mesh.mode, 0, circle_mesh.vertex_count);
+    DrawableObject_UpdateModel(&circle_obj);
+    DrawableObject_Draw(&circle_obj, uLoc_modelView, uLoc_material);
 }
 
 static void sceneExit(void)
@@ -305,6 +276,13 @@ int main()
     {
         hidScanInput();
 
+        float heheX = 0.0;
+        float heheY = 0.0f;
+        float heheZ = 0.0f;
+
+        float heheAngleX = 0.0f;
+        float heheAngleY = 0.0f;
+
         // Respond to user input
         u32 kDown = hidKeysDown();
         u32 kHeld = hidKeysHeld();
@@ -312,27 +290,41 @@ int main()
             break; // break in order to return to hbmenu
 
         if (kHeld & KEY_DDOWN)
-            yPos += -0.1;
+            heheY += -0.1;
         if (kHeld & KEY_DUP)
-            yPos += 0.1;
+            heheY += 0.1;
         if (kHeld & KEY_DLEFT)
-            xPos += -0.1;
+            heheX += -0.1;
         if (kHeld & KEY_DRIGHT)
-            xPos += 0.1;
+            heheX += 0.1;
 
         if (kHeld & KEY_X)
-            angleX += -0.1;
+            heheAngleX += -0.1;
         if (kHeld & KEY_B)
-            angleX += 0.1;
+            heheAngleX += 0.1;
         if (kHeld & KEY_A)
-            angleY += 0.1;
+            heheAngleY += 0.1;
         if (kHeld & KEY_Y)
-            angleY += -0.1;
+            heheAngleY += -0.1;
 
         if (kHeld & KEY_ZR)
-            zPos += -0.1;
+            heheZ += -0.1;
         if (kHeld & KEY_ZL)
-            zPos += 0.1;
+            heheZ += 0.1;
+
+        cube_obj.x += heheX;
+        cube_obj.y += heheY;
+        cube_obj.z += heheZ;
+
+        cube_obj.rot_x += heheAngleX;
+        cube_obj.rot_y += heheAngleY;
+
+        circle_obj.x -= heheX;
+        circle_obj.y -= heheY;
+        circle_obj.z += heheZ;
+
+        circle_obj.rot_x -= heheAngleX;
+        circle_obj.rot_y -= heheAngleY;
 
         // Render the scene
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);

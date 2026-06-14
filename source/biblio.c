@@ -1,6 +1,8 @@
 #include "../include/biblio.h"
 #include <3ds/allocator/linear.h>
+#include <c3d/base.h>
 #include <c3d/buffers.h>
+#include <c3d/maths.h>
 #include <c3d/texenv.h>
 #include <c3d/uniforms.h>
 #include <string.h>
@@ -80,9 +82,44 @@ void Material_Bind(const Material *m, int uLoc_material)
     {
         // Configure TexEnv to completely ignore textures/lighting and use a solid color
         C3D_TexEnvSrc(env0, C3D_Both, GPU_CONSTANT, 0, 0);
-        C3D_TexEnvColor(env0, 0xFFFFFFFF); // AABBGGRR
+        C3D_TexEnvColor(env0, m->color); // AABBGGRR
         C3D_TexEnvFunc(env0, C3D_Both, GPU_REPLACE);
     }
     C3D_TexEnv *env1 = C3D_GetTexEnv(1);
     C3D_TexEnvInit(env1);
+}
+
+// =========================== Drawable3dObjects ===============================
+Drawable3dObject DrawableObject_New(Mesh *mesh, Material *material)
+{
+    Drawable3dObject obj;
+
+    obj.mesh     = mesh;
+    obj.material = material;
+
+    obj.x = obj.y = obj.z = obj.rot_x = obj.rot_y = obj.rot_z = 0.0f;
+    obj.z                                                     = -2.0f;
+
+    Mtx_Identity(&obj.modelView);
+
+    return obj;
+}
+
+void DrawableObject_UpdateModel(Drawable3dObject *obj)
+{
+    Mtx_Identity(&obj->modelView);
+
+    Mtx_Translate(&obj->modelView, obj->x, obj->y, obj->z, true);
+    Mtx_RotateX(&obj->modelView, obj->rot_x, true);
+    Mtx_RotateY(&obj->modelView, obj->rot_y, true);
+    Mtx_RotateZ(&obj->modelView, obj->rot_z, true);
+}
+
+void DrawableObject_Draw(const Drawable3dObject *obj, int uLoc_modelView, int uLoc_material)
+{
+    Material_Bind(obj->material, uLoc_material);
+    // Upload new cube uniform
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &obj->modelView);
+    Mesh_Bind(obj->mesh);
+    C3D_DrawArrays(obj->mesh->mode, 0, obj->mesh->vertex_count);
 }
