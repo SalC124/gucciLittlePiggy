@@ -203,46 +203,24 @@ static void sceneInit(void)
 
 static void sceneRender(void)
 {
-    // Update global camera uniforms
+    // Update the uniforms
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
-<<<<<<< HEAD
     // C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material); // removed due to changing material
-=======
->>>>>>> 049b1121c115b7226ed24f38b64ccb63a024e74d
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightHalfVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightClr, 1.0f, 1.0f, 1.0f, 1.0f);
 
-<<<<<<< HEAD
     C3D_BufInfo *bufInfo = C3D_GetBufInfo();
 
     // ============================= Draw the Cube =============================
     // Bind cube texture
     C3D_TexBind(0, &sal_tex);
 
-=======
-    C3D_BufInfo *bufInfo   = C3D_GetBufInfo();
-    C3D_AttrInfo *attrInfo = C3D_GetAttrInfo();
-
-    // ============================= Draw the Cube =============================
-    C3D_TexBind(0, &sal_tex);
-
-    // Explicitly reset attribute info layout for Cube
-    AttrInfo_Init(attrInfo);
-    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 3); // v0=position
-    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 2); // v1=texcoord
-    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 3); // v2=normal
-
->>>>>>> 049b1121c115b7226ed24f38b64ccb63a024e74d
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, cube_vbo_data, sizeof(vertex), 3, 0x210);
     C3D_SetBufInfo(bufInfo);
 
-<<<<<<< HEAD
     // material set on a per-object basis
-=======
-    // Restore the cube's shiny reflective material profile
->>>>>>> 049b1121c115b7226ed24f38b64ccb63a024e74d
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &material);
 
     C3D_Mtx cubeModelView;
@@ -250,49 +228,30 @@ static void sceneRender(void)
     Mtx_Translate(&cubeModelView, 0.0 + xPos, 0.0 + yPos, -2.0f, true);
     Mtx_RotateX(&cubeModelView, angleX, true);
     Mtx_RotateY(&cubeModelView, angleY, true);
+
+    // Upload new cube uniform
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &cubeModelView);
 
-<<<<<<< HEAD
     C3D_TexEnv *cubeEnv0 = C3D_GetTexEnv(0);
     C3D_TexEnvInit(cubeEnv0);
     // Use texture *modulate* mode
-=======
-    // Completely reset and decouple TexEnv Stage 0 and Stage 1 for Cube
-    C3D_TexEnv *cubeEnv0 = C3D_GetTexEnv(0);
-    C3D_TexEnvInit(cubeEnv0);
->>>>>>> 049b1121c115b7226ed24f38b64ccb63a024e74d
     C3D_TexEnvSrc(cubeEnv0, C3D_Both, GPU_TEXTURE0, GPU_PRIMARY_COLOR, 0);
     C3D_TexEnvFunc(cubeEnv0, C3D_Both, GPU_MODULATE);
 
     C3D_TexEnv *cubeEnv1 = C3D_GetTexEnv(1);
-<<<<<<< HEAD
     C3D_TexEnvInit(cubeEnv1);
-=======
-    C3D_TexEnvInit(cubeEnv1); // Forces stage 1 into a clean pass-through state
->>>>>>> 049b1121c115b7226ed24f38b64ccb63a024e74d
 
+    // Draw cube VBO
     C3D_DrawArrays(GPU_TRIANGLES, 0, CUBE_VERTEX_LIST_COUNT);
 
     // ============================ Draw the Circle ============================
-<<<<<<< HEAD
     // Bind circle texture
     C3D_TexBind(0, NULL);
 
-=======
-    C3D_TexBind(0, NULL);
-
-    // Explicitly reset attribute info layout for Circle
-    AttrInfo_Init(attrInfo);
-    AttrInfo_AddLoader(attrInfo, 0, GPU_FLOAT, 3);
-    AttrInfo_AddLoader(attrInfo, 1, GPU_FLOAT, 2);
-    AttrInfo_AddLoader(attrInfo, 2, GPU_FLOAT, 3);
-
->>>>>>> 049b1121c115b7226ed24f38b64ccb63a024e74d
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, circle_vbo_data, sizeof(vertex), 3, 0x210);
     C3D_SetBufInfo(bufInfo);
 
-<<<<<<< HEAD
     static const C3D_Mtx flatWhiteMaterial = {{
         {{1.0f, 1.0f, 1.0f, 1.0f}},
         {{1.0f, 1.0f, 1.0f, 1.0f}},
@@ -303,23 +262,11 @@ static void sceneRender(void)
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &flatWhiteMaterial);
 
     // Calculate the modelView matrix for circle
-=======
-    // FORCE FLAT LIGHTING: Slam the material to pure emissive white before drawing circle
-    static const C3D_Mtx flatWhiteMaterial = {{
-        {{1.0f, 1.0f, 1.0f, 1.0f}}, // Ambient
-        {{1.0f, 1.0f, 1.0f, 1.0f}}, // Diffuse
-        {{0.0f, 0.0f, 0.0f, 0.0f}}, // Specular (Disabled to stop tan/yellow shifts!)
-        {{1.0f, 1.0f, 1.0f, 1.0f}}, // Emission
-    }};
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_material, &flatWhiteMaterial);
-
->>>>>>> 049b1121c115b7226ed24f38b64ccb63a024e74d
     C3D_Mtx circleModelView;
     Mtx_Identity(&circleModelView);
     Mtx_Translate(&circleModelView, 0.0 - xPos, 0.0 - yPos, -2.0f - zPos, true);
     Mtx_RotateX(&circleModelView, angleX, true);
     Mtx_RotateY(&circleModelView, angleY, true);
-<<<<<<< HEAD
 
     // Upload new circle uniform
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &circleModelView);
@@ -329,20 +276,12 @@ static void sceneRender(void)
     // Configure TexEnv to completely ignore textures/lighting and use a solid color
     C3D_TexEnvSrc(circleEnv0, C3D_Both, GPU_PRIMARY_COLOR, 0, 0);
     // circleEnv0->srcRgb = GPU_PRIMARY_COLOR; // force srcRgb. no matter the material
-=======
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &circleModelView);
-
-    // Completely reset and decouple TexEnv Stage 0 and Stage 1 for Circle
-    C3D_TexEnv *circleEnv0 = C3D_GetTexEnv(0);
-    C3D_TexEnvInit(circleEnv0);
-    C3D_TexEnvSrc(circleEnv0, C3D_Both, GPU_PRIMARY_COLOR, 0, 0); // Pull directly from white material
-    circleEnv0->srcRgb = GPU_PRIMARY_COLOR;                       // Fix fallback assignments explicitly
->>>>>>> 049b1121c115b7226ed24f38b64ccb63a024e74d
     C3D_TexEnvFunc(circleEnv0, C3D_Both, GPU_REPLACE);
 
     C3D_TexEnv *circleEnv1 = C3D_GetTexEnv(1);
     C3D_TexEnvInit(circleEnv1);
 
+    // Draw the circle VBO
     C3D_DrawArrays(GPU_TRIANGLE_FAN, 0, CIRCLE_VERTEX_COUNT);
 }
 
