@@ -4,6 +4,7 @@
 #include <3ds/gpu/enums.h>
 #include <3ds/services/hid.h>
 #include <c3d/buffers.h>
+#include <c3d/texenv.h>
 #include <citro3d.h>
 #include <string.h>
 #include <tex3ds.h>
@@ -143,7 +144,7 @@ static C3D_Mtx material = {{
 static C3D_Tex sal_tex;
 
 static float angleX = 0.0, angleY = 0.0;
-static float xPos = 0.0, yPos = 0.0;
+static float xPos = 0.0, yPos = 0.0, zPos = 0.0;
 
 // Helper function for loading a texture from memory
 static bool loadTextureFromMem(C3D_Tex *tex, C3D_TexCube *cube, const void *data, size_t size)
@@ -224,6 +225,7 @@ static void sceneRender(void)
     // ============================= Draw the Cube =============================
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, cube_vbo_data, sizeof(vertex), 3, 0x210);
+    C3D_SetBufInfo(bufInfo);
 
     // Calculate the modelView matrix for cube
     C3D_Mtx cubeModelView;
@@ -239,7 +241,6 @@ static void sceneRender(void)
     C3D_TexBind(0, &sal_tex);
 
     // Use texture *modulate* mode
-    C3D_TexEnvInit(env);
     C3D_TexEnvSrc(env, C3D_Both, GPU_TEXTURE0, GPU_PRIMARY_COLOR, 0);
     C3D_TexEnvFunc(env, C3D_Both, GPU_MODULATE);
 
@@ -249,20 +250,24 @@ static void sceneRender(void)
     // ============================ Draw the Circle ============================
     BufInfo_Init(bufInfo);
     BufInfo_Add(bufInfo, circle_vbo_data, sizeof(vertex), 3, 0x210);
+    C3D_SetBufInfo(bufInfo);
 
     // Calculate the modelView matrix for circle
     C3D_Mtx circleModelView;
     Mtx_Identity(&circleModelView);
-    Mtx_Translate(&circleModelView, 0.0 - xPos, 0.0 - yPos, -2.0f, true);
+    Mtx_Translate(&circleModelView, 0.0 - xPos, 0.0 - yPos, -2.0f - zPos, true);
     Mtx_RotateX(&circleModelView, angleX, true);
     Mtx_RotateY(&circleModelView, angleY, true);
 
     // Upload new cube uniform
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &circleModelView);
 
+    // Bind NO texture
+    C3D_TexBind(0, NULL);
+
     // Configure TexEnv to completely ignore textures/lighting and use a solid color
-    C3D_TexEnvInit(env);
     C3D_TexEnvSrc(env, C3D_Both, GPU_CONSTANT, GPU_PRIMARY_COLOR, GPU_PRIMARY_COLOR); // Use the constant color
+    C3D_TexEnvSrc(env, C3D_Both, GPU_CONSTANT, 0, 0); // Use the constant color
     C3D_TexEnvFunc(env, C3D_Both, GPU_REPLACE);       // Replace everything with it
     C3D_TexEnvColor(env, 0xFFFFFFFF);                 // Solid White (RGBA: 255, 255, 255, 255)
 
@@ -333,6 +338,11 @@ int main()
             angleY += 0.1;
         if (kHeld & KEY_Y)
             angleY += -0.1;
+
+        if (kHeld & KEY_ZR)
+            zPos += -0.1;
+        if (kHeld & KEY_ZL)
+            zPos += 0.1;
 
         // Render the scene
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
