@@ -6,6 +6,7 @@
 #include <c3d/buffers.h>
 #include <c3d/texenv.h>
 #include <citro3d.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <tex3ds.h>
@@ -135,6 +136,9 @@ static shaderProgram_s program;
 static int uLoc_projection, uLoc_modelView;
 static int uLoc_lightVec, uLoc_lightHalfVec, uLoc_lightClr, uLoc_material;
 static C3D_Mtx projection;
+
+Camera camera = {0};
+
 static C3D_Mtx material                = {{
     {{0.0f, 0.2f, 0.2f, 0.2f}}, // Ambient
     {{0.0f, 0.4f, 0.4f, 0.4f}}, // Diffuse
@@ -216,10 +220,18 @@ static void sceneInit(void)
     cube_obj   = DrawableObject_New(&cube_mesh, &cube_material);
     circle_obj = DrawableObject_New(&circle_mesh, &circle_material);
 
-    cube_obj.z   = -2.0f;
-    circle_obj.z = -2.0f;
-
+    cube_obj.z       = -3.5f;
+    cube_obj.y       = 0.5f;
+    circle_obj.z     = -2.0f;
+    circle_obj.rot_x = -M_PI_2;
     circle_obj.sc_x = circle_obj.sc_y = 10.0f;
+
+    camera.x     = 0.0;
+    camera.y     = 2.0;
+    camera.z     = 1.5;
+    camera.rot_x = -0.3;
+    camera.rot_y = 0.0;
+    camera.rot_z = 0.0;
 }
 
 static void sceneRender(void)
@@ -230,13 +242,15 @@ static void sceneRender(void)
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightHalfVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightClr, 1.0f, 1.0f, 1.0f, 1.0f);
 
+    Camera_Update(&camera);
+
     // ============================= Draw the Cube =============================
     DrawableObject_UpdateModel(&cube_obj);
-    DrawableObject_Draw(&cube_obj, uLoc_modelView, uLoc_material);
+    DrawableObject_Draw(&cube_obj, &camera.view, uLoc_modelView, uLoc_material);
 
     // ============================ Draw the Circle ============================
     DrawableObject_UpdateModel(&circle_obj);
-    DrawableObject_Draw(&circle_obj, uLoc_modelView, uLoc_material);
+    DrawableObject_Draw(&circle_obj, &camera.view, uLoc_modelView, uLoc_material);
 }
 
 static void sceneExit(void)
@@ -279,61 +293,10 @@ int main()
     {
         hidScanInput();
 
-        float heheX = 0.0;
-        float heheY = 0.0f;
-        float heheZ = 0.0f;
-
-        float heheAngleX = 0.0f;
-        float heheAngleY = 0.0f;
-
         // Respond to user input
         u32 kDown = hidKeysDown();
-        u32 kHeld = hidKeysHeld();
         if (kDown & KEY_START)
             break; // break in order to return to hbmenu
-
-        if (kHeld & KEY_DDOWN)
-            heheY += -0.1;
-        if (kHeld & KEY_DUP)
-            heheY += 0.1;
-        if (kHeld & KEY_DLEFT)
-            heheX += -0.1;
-        if (kHeld & KEY_DRIGHT)
-            heheX += 0.1;
-
-        if (kHeld & KEY_X)
-            heheAngleX += -0.1;
-        if (kHeld & KEY_B)
-            heheAngleX += 0.1;
-        if (kHeld & KEY_A)
-            heheAngleY += 0.1;
-        if (kHeld & KEY_Y)
-            heheAngleY += -0.1;
-
-        if (kHeld & KEY_ZR)
-            heheZ += -0.1;
-        if (kHeld & KEY_ZL)
-            heheZ += 0.1;
-
-        cube_obj.x += heheX;
-        cube_obj.y += heheY;
-        cube_obj.z += heheZ;
-
-        cube_obj.rot_x += heheAngleX;
-        cube_obj.rot_y += heheAngleY;
-
-        circle_obj.x -= heheX;
-        circle_obj.y -= heheY;
-        circle_obj.z += heheZ;
-
-        circle_obj.rot_x -= heheAngleX;
-        circle_obj.rot_y -= heheAngleY;
-
-        if (kDown & KEY_SELECT)
-        {
-            printf("z: %f\n", heheZ);
-            printf("angle x: %f\n", heheAngleX);
-        }
 
         // Render the scene
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);

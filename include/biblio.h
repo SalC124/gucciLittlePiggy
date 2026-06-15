@@ -63,6 +63,18 @@ typedef struct
 
 Drawable3dObject DrawableObject_New(Mesh *mesh, Material *material);
 void DrawableObject_UpdateModel(Drawable3dObject *obj);
-void DrawableObject_Draw(const Drawable3dObject *obj, int uLoc_modelView, int uLoc_material);
+void DrawableObject_Draw(const Drawable3dObject *obj, const C3D_Mtx *view, int uLoc_modelView, int uLoc_material);
+
+// ================================= Camera ====================================
+
+typedef struct
+{
+    float x, y, z;
+    float rot_x, rot_y, rot_z;
+    C3D_Mtx view;
+} Camera;
+
+Camera Camera_New();
+void Camera_Update(Camera *cam);
 
 #endif

@@ -117,11 +117,30 @@ void DrawableObject_UpdateModel(Drawable3dObject *obj)
     Mtx_Scale(&obj->modelView, obj->sc_x, obj->sc_y, obj->sc_z);
 }
 
-void DrawableObject_Draw(const Drawable3dObject *obj, int uLoc_modelView, int uLoc_material)
+void DrawableObject_Draw(const Drawable3dObject *obj, const C3D_Mtx *view, int uLoc_modelView, int uLoc_material)
 {
     Material_Bind(obj->material, uLoc_material);
-    // Upload new cube uniform
-    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &obj->modelView);
+
+    C3D_Mtx modelView;
+    Mtx_Multiply(&modelView, view, &obj->modelView);
+
+    C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_modelView, &modelView);
+
     Mesh_Bind(obj->mesh);
     C3D_DrawArrays(obj->mesh->mode, 0, obj->mesh->vertex_count);
+}
+
+// ================================= Camera ====================================
+
+void Camera_Update(Camera *cam)
+{
+    Mtx_Identity(&cam->view);
+
+    // Apply inverse rotations
+    Mtx_RotateZ(&cam->view, -cam->rot_z, true);
+    Mtx_RotateX(&cam->view, -cam->rot_x, true);
+    Mtx_RotateY(&cam->view, -cam->rot_y, true);
+
+    // Apply inverse translation
+    Mtx_Translate(&cam->view, -cam->x, -cam->y, -cam->z, true);
 }
