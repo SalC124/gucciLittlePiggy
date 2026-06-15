@@ -381,17 +381,17 @@ int main()
                 printf("Press A to jump!\n");
                 printf("Rotations: %u\n", total_rotations);
             }
-
-            // Render everything
-            C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-            C3D_RenderTargetClear(target, C3D_CLEAR_ALL, CLEAR_COLOR, 0);
-            C3D_FrameDrawOn(target);
-            sceneRender();
-            C3D_FrameEnd(0);
         }
         else
         {
         }
+
+        // Render everything
+        C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+        C3D_RenderTargetClear(target, C3D_CLEAR_ALL, CLEAR_COLOR, 0);
+        C3D_FrameDrawOn(target);
+        sceneRender();
+        C3D_FrameEnd(0);
     }
 
     // Deinitialize the scene
