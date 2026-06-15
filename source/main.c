@@ -8,7 +8,6 @@
 #include <citro3d.h>
 #include <math.h>
 #include <stdio.h>
-#include <string.h>
 #include <tex3ds.h>
 
 #include "../include/biblio.h"
@@ -20,7 +19,6 @@
      GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) |                     \
      GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO))
 
-// static vertex *cube_vbo_data;
 static const vertex cube_vertex_list[] = {
     // First face (PZ)
     // First triangle
@@ -171,9 +169,21 @@ Mesh circle_mesh;
 
 Material cube_material;
 Material circle_material;
+Material hand_material;
 
 Drawable3dObject cube_obj;
 Drawable3dObject circle_obj;
+Drawable3dObject hand_obj;
+
+static bool is_jumping     = false;
+static u64 jump_start_time = 0;
+const u64 JUMP_DURATION    = 240;
+
+const float Y_START    = 0.5f;
+const float MAX_HEIGHT = 1.0f;
+
+static u64 hand_start_time = 0;
+static u32 total_rotations = 0;
 
 static void sceneInit(void)
 {
@@ -216,15 +226,28 @@ static void sceneInit(void)
 
     cube_material   = Material_CreateTextured(&sal_tex, &material);
     circle_material = Material_CreateColor(0xFFFFFFFF, &flatWhiteMaterial);
+    hand_material   = Material_CreateColor(0xFFFFFF00, &flatWhiteMaterial);
 
     cube_obj   = DrawableObject_New(&cube_mesh, &cube_material);
     circle_obj = DrawableObject_New(&circle_mesh, &circle_material);
+    hand_obj   = DrawableObject_New(&cube_mesh, &hand_material); // Reuses the cube mesh
 
-    cube_obj.z       = -3.5f;
-    cube_obj.y       = 0.5f;
+    cube_obj.z = -3.8f;
+    cube_obj.y = Y_START;
+
     circle_obj.z     = -2.0f;
     circle_obj.rot_x = -M_PI_2;
     circle_obj.sc_x = circle_obj.sc_y = 10.0f;
+
+    hand_obj.sc_x = 0.2f;
+    hand_obj.sc_y = 0.2f;
+    hand_obj.sc_z = 5.0f;
+
+    hand_obj.x = circle_obj.x;
+    hand_obj.y = circle_obj.y + hand_obj.sc_y / 2;
+    hand_obj.z = circle_obj.z;
+
+    hand_obj.pivot_z = 0.6f;
 
     camera.x     = 0.0;
     camera.y     = 2.0;
@@ -236,7 +259,6 @@ static void sceneInit(void)
 
 static void sceneRender(void)
 {
-    // Update the uniforms
     C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, uLoc_projection, &projection);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightVec, 0.0f, 0.0f, -1.0f, 0.0f);
     C3D_FVUnifSet(GPU_VERTEX_SHADER, uLoc_lightHalfVec, 0.0f, 0.0f, -1.0f, 0.0f);
@@ -251,6 +273,10 @@ static void sceneRender(void)
     // ============================ Draw the Circle ============================
     DrawableObject_UpdateModel(&circle_obj);
     DrawableObject_Draw(&circle_obj, &camera.view, uLoc_modelView, uLoc_material);
+
+    // ============================= Draw the Hand =============================
+    DrawableObject_UpdateModel(&hand_obj);
+    DrawableObject_Draw(&hand_obj, &camera.view, uLoc_modelView, uLoc_material);
 }
 
 static void sceneExit(void)
@@ -266,6 +292,13 @@ static void sceneExit(void)
     shaderProgramFree(&program);
     DVLB_Free(vshader_dvlb);
 }
+
+enum GameStates
+{
+    BEFORE_GAME,
+    DURING_GAME,
+    AFTER_GAME,
+};
 
 int main()
 {
@@ -286,24 +319,79 @@ int main()
     consoleInit(GFX_BOTTOM, &bottomScreen);
     consoleSelect(&bottomScreen);
     printf("Salutations! :D\n");
-    printf("...or hi, i guess :(\n");
+    printf("Press A start (and jump, i guess)\n");
+    printf("Rotations: 0\n");
 
-    // Main loop
+    // Grab the baseline time right before starting the loop
+
+    int game_state = BEFORE_GAME;
+
     while (aptMainLoop())
     {
         hidScanInput();
-
-        // Respond to user input
         u32 kDown = hidKeysDown();
-        if (kDown & KEY_START)
-            break; // break in order to return to hbmenu
 
-        // Render the scene
-        C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-        C3D_RenderTargetClear(target, C3D_CLEAR_ALL, CLEAR_COLOR, 0);
-        C3D_FrameDrawOn(target);
-        sceneRender();
-        C3D_FrameEnd(0);
+        if (kDown & KEY_START)
+            break;
+
+        if (game_state == BEFORE_GAME)
+        {
+            if (kDown & KEY_A)
+            {
+                hand_start_time = osGetTime();
+                game_state      = DURING_GAME;
+            }
+        }
+        else if (game_state == DURING_GAME)
+        {
+            u64 current_time = osGetTime();
+
+            if ((kDown & KEY_A) && !is_jumping)
+            {
+                is_jumping      = true;
+                jump_start_time = current_time;
+            }
+
+            if (is_jumping)
+            {
+                u64 elapsed = current_time - jump_start_time;
+                if (elapsed >= JUMP_DURATION)
+                {
+                    cube_obj.y = Y_START;
+                    is_jumping = false;
+                }
+                else
+                {
+                    float x    = (float)elapsed / (float)JUMP_DURATION;
+                    cube_obj.y = Y_START + (4.0f * MAX_HEIGHT * x * (1.0f - x)); // smart maths
+                }
+            }
+
+            u64 clock_elapsed       = current_time - hand_start_time;
+            float rotation_progress = (float)(clock_elapsed % 1000) / 1000.0f;
+
+            hand_obj.rot_y = -(rotation_progress * (M_TAU));
+
+            u32 calculated_rotations = clock_elapsed / 1000;
+            if (calculated_rotations > total_rotations)
+            {
+                total_rotations = calculated_rotations;
+                consoleClear();
+                printf("Salutations! :D\n");
+                printf("Press A to jump!\n");
+                printf("Rotations: %u\n", total_rotations);
+            }
+
+            // Render everything
+            C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+            C3D_RenderTargetClear(target, C3D_CLEAR_ALL, CLEAR_COLOR, 0);
+            C3D_FrameDrawOn(target);
+            sceneRender();
+            C3D_FrameEnd(0);
+        }
+        else
+        {
+        }
     }
 
     // Deinitialize the scene

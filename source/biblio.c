@@ -97,7 +97,7 @@ Drawable3dObject DrawableObject_New(Mesh *mesh, Material *material)
     obj.mesh     = mesh;
     obj.material = material;
 
-    obj.x = obj.y = obj.z = obj.rot_x = obj.rot_y = obj.rot_z = 0.0f;
+    obj.x = obj.y = obj.z = obj.rot_x = obj.rot_y = obj.rot_z = obj.pivot_x = obj.pivot_y = obj.pivot_z = 0.0f;
     obj.sc_x = obj.sc_y = obj.sc_z = 1.0f;
 
     Mtx_Identity(&obj.modelView);
@@ -110,11 +110,16 @@ void DrawableObject_UpdateModel(Drawable3dObject *obj)
     Mtx_Identity(&obj->modelView);
 
     Mtx_Translate(&obj->modelView, obj->x, obj->y, obj->z, true);
+
     Mtx_RotateX(&obj->modelView, obj->rot_x, true);
     Mtx_RotateY(&obj->modelView, obj->rot_y, true);
     Mtx_RotateZ(&obj->modelView, obj->rot_z, true);
 
+    Mtx_Translate(&obj->modelView, obj->pivot_x, obj->pivot_y, obj->pivot_z, true);
+
     Mtx_Scale(&obj->modelView, obj->sc_x, obj->sc_y, obj->sc_z);
+
+    Mtx_Translate(&obj->modelView, -obj->pivot_x, -obj->pivot_y, -obj->pivot_z, true);
 }
 
 void DrawableObject_Draw(const Drawable3dObject *obj, const C3D_Mtx *view, int uLoc_modelView, int uLoc_material)
