@@ -100,6 +100,10 @@ Drawable3dObject DrawableObject_New(Mesh *mesh, Material *material)
     obj.x = obj.y = obj.z = obj.rot_x = obj.rot_y = obj.rot_z = obj.pivot_x = obj.pivot_y = obj.pivot_z = 0.0f;
     obj.sc_x = obj.sc_y = obj.sc_z = 1.0f;
 
+    obj.col_x = obj.sc_x;
+    obj.col_y = obj.sc_y;
+    obj.col_z = obj.sc_z;
+
     Mtx_Identity(&obj.modelView);
 
     return obj;

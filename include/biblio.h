@@ -58,6 +58,7 @@ typedef struct
     float rot_x, rot_y, rot_z;
     float sc_x, sc_y, sc_z;
     float pivot_x, pivot_y, pivot_z;
+    float col_x, col_y, col_z;
 
     C3D_Mtx modelView;
 } Drawable3dObject;

@@ -1,6 +1,7 @@
 #include "sal_t3x.h"
 #include "vshader_shbin.h"
 #include <3ds.h>
+#include <3ds/console.h>
 #include <3ds/gpu/enums.h>
 #include <3ds/services/hid.h>
 #include <c3d/buffers.h>
@@ -247,6 +248,10 @@ static void sceneInit(void)
     hand_obj.y = circle_obj.y + hand_obj.sc_y / 2;
     hand_obj.z = circle_obj.z;
 
+    hand_obj.col_x = 0.2f;
+    hand_obj.col_y = 0.2f;
+    hand_obj.col_z = 0.2f;
+
     hand_obj.pivot_z = 0.6f;
 
     camera.x     = 0.0;
@@ -300,6 +305,98 @@ enum GameStates
     AFTER_GAME,
 };
 
+void printTime(u32 time)
+{
+    printf("%02lu:%02lu:%02lu\n", time / 3600, (time % 3600) / 60, time % 60);
+}
+
+static bool HandOBBHitsCube(const Drawable3dObject *hand, const Drawable3dObject *cube)
+{
+    float hx = hand->x;
+    float hy = hand->y;
+    float hz = hand->z;
+
+    float half_len = hand->sc_z * 0.5f;
+    float half_w   = hand->sc_x * 0.5f;
+
+    float angle = hand->rot_y;
+
+    float dir_x = -sinf(angle);
+    float dir_z = -cosf(angle);
+
+    float px = -dir_z;
+    float pz = dir_x;
+
+    float tip_x = hx + dir_x * half_len;
+    float tip_z = hz + dir_z * half_len;
+
+    float base_x = hx - dir_x * half_len;
+    float base_z = hz - dir_z * half_len;
+
+    float cube_min_x = cube->x - cube->sc_x * 0.5f;
+    float cube_max_x = cube->x + cube->sc_x * 0.5f;
+    float cube_min_y = cube->y - cube->sc_y * 0.5f;
+    float cube_max_y = cube->y + cube->sc_y * 0.5f;
+    float cube_min_z = cube->z - cube->sc_z * 0.5f;
+    float cube_max_z = cube->z + cube->sc_z * 0.5f;
+
+    float hand_min_y = hy - hand->sc_y * 0.5f;
+    float hand_max_y = hy + hand->sc_y * 0.5f;
+
+    if (cube_max_y < hand_min_y || cube_min_y > hand_max_y)
+        return false;
+
+    float proj_cube_min = cube_min_x * dir_x + cube_min_z * dir_z;
+    float proj_cube_max = cube_max_x * dir_x + cube_max_z * dir_z;
+
+    float proj_hand_min = base_x * dir_x + base_z * dir_z;
+    float proj_hand_max = tip_x * dir_x + tip_z * dir_z;
+
+    if (proj_cube_max < proj_hand_min || proj_cube_min > proj_hand_max)
+        return false;
+
+    float proj_cube_min_p = cube_min_x * px + cube_min_z * pz;
+    float proj_cube_max_p = cube_max_x * px + cube_max_z * pz;
+
+    float proj_hand_min_p = -half_w;
+    float proj_hand_max_p = half_w;
+
+    if (proj_cube_max_p < proj_hand_min_p || proj_cube_min_p > proj_hand_max_p)
+        return false;
+
+    return true;
+}
+
+int game_state;
+bool touchable;
+bool first;
+
+u32 rotations;
+u32 bestRotations;
+
+void resetGame(void)
+{
+    hand_obj.rot_y = 0;
+    cube_obj.y     = Y_START;
+
+    game_state = BEFORE_GAME;
+    touchable  = false;
+    first      = true;
+
+    is_jumping      = false;
+    total_rotations = 0;
+
+    consoleClear();
+    printf("Press A start (and jump, i guess)\n");
+
+    if (rotations > bestRotations)
+    {
+        printf("best time: ");
+        printTime(rotations);
+    }
+    rotations = 0;
+}
+
 int main()
 {
     // Initialize graphics
@@ -318,13 +415,8 @@ int main()
     // Initialize console for both screen using the two different PrintConsole we have defined
     consoleInit(GFX_BOTTOM, &bottomScreen);
     consoleSelect(&bottomScreen);
-    printf("Salutations! :D\n");
-    printf("Press A start (and jump, i guess)\n");
-    printf("Rotations: 0\n");
 
-    // Grab the baseline time right before starting the loop
-
-    int game_state = BEFORE_GAME;
+    resetGame();
 
     while (aptMainLoop())
     {
@@ -376,14 +468,31 @@ int main()
             if (calculated_rotations > total_rotations)
             {
                 total_rotations = calculated_rotations;
+
+                rotations = total_rotations;
                 consoleClear();
-                printf("Salutations! :D\n");
-                printf("Press A to jump!\n");
-                printf("Rotations: %u\n", total_rotations);
+                printTime(rotations);
+            }
+
+            if (clock_elapsed > 600)
+                touchable = true;
+
+            if (touchable && HandOBBHitsCube(&hand_obj, &cube_obj))
+            {
+                game_state = AFTER_GAME;
             }
         }
         else
         {
+            if (first)
+            {
+                printf("press Select to restart\n");
+                first = false;
+            }
+            if (kDown & KEY_SELECT)
+            {
+                resetGame();
+            }
         }
 
         // Render everything
